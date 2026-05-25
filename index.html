@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบติดตามนักเรียนซ่อมเสริม (Remedial Tracking)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        purple: { pastel: '#E9D8FD', light: '#FAF5FF', main: '#9F7AEA', dark: '#553C9A' },
+                        yellow: { pastel: '#FEFCBF', main: '#ECC94B' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap');
+        body { font-family: 'Prompt', sans-serif; background-color: #FAF5FF; }
+        .nav-active { background-color: #E9D8FD; color: #553C9A; font-weight: 600; border-radius: 0.5rem; }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        /* ซ่อนเมนูตอนพิมพ์รายงาน */
+        @media print {
+            .no-print { display: none !important; }
+            .view-section { display: none; }
+            #report-view { display: block; }
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex overflow-hidden">
+
+    <nav class="no-print bg-white shadow-lg w-full md:w-64 flex flex-row md:flex-col justify-around md:justify-start fixed md:relative bottom-0 md:bottom-auto h-16 md:h-full z-50">
+        <div class="hidden md:block p-6 text-center border-b border-purple-pastel">
+            <i class="fa-solid fa-graduation-cap text-4xl text-purple-main mb-2"></i>
+            <h1 class="text-lg font-bold text-purple-dark">Remedial Tracking</h1>
+        </div>
+        <div class="flex md:flex-col w-full px-2 py-2 md:py-4 gap-2">
+            <button onclick="switchView('dashboard')" id="nav-dashboard" class="flex-1 md:flex-none flex flex-col md:flex-row items-center px-4 py-2 md:py-3 text-sm text-gray-500 hover:bg-purple-pastel hover:text-purple-main nav-active transition">
+                <i class="fa-solid fa-chart-pie md:mr-3 text-lg"></i> <span class="hidden md:inline">แดชบอร์ด</span>
+            </button>
+            <button onclick="switchView('form')" id="nav-form" class="flex-1 md:flex-none flex flex-col md:flex-row items-center px-4 py-2 md:py-3 text-sm text-gray-500 hover:bg-purple-pastel hover:text-purple-main transition">
+                <i class="fa-solid fa-user-plus md:mr-3 text-lg"></i> <span class="hidden md:inline">บันทึกข้อมูล</span>
+            </button>
+            <button onclick="switchView('list')" id="nav-list" class="flex-1 md:flex-none flex flex-col md:flex-row items-center px-4 py-2 md:py-3 text-sm text-gray-500 hover:bg-purple-pastel hover:text-purple-main transition">
+                <i class="fa-solid fa-list md:mr-3 text-lg"></i> <span class="hidden md:inline">รายชื่อซ่อมเสริม</span>
+            </button>
+            <button onclick="switchView('report')" id="nav-report" class="flex-1 md:flex-none flex flex-col md:flex-row items-center px-4 py-2 md:py-3 text-sm text-gray-500 hover:bg-purple-pastel hover:text-purple-main transition">
+                <i class="fa-solid fa-file-invoice md:mr-3 text-lg"></i> <span class="hidden md:inline">รายงานผล</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 overflow-y-auto p-4 md:p-8 mb-16 md:mb-0">
+        
+        <div id="toast" class="fixed top-4 right-4 bg-yellow-main text-white px-4 py-2 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full opacity-0 z-50">
+            <i class="fa-solid fa-bell mr-2"></i> <span id="toast-msg">แจ้งเตือน!</span>
+        </div>
+
+        <section id="dashboard-view" class="view-section active">
+            <h2 class="text-2xl font-semibold text-purple-dark mb-6">ภาพรวมระบบ (Dashboard)</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white p-4 rounded-xl shadow border-l-4 border-purple-main">
+                    <p class="text-sm text-gray-500">นักเรียนที่ต้องตามงานทั้งหมด</p>
+                    <p class="text-3xl font-bold text-purple-main" id="dash-total">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow border-l-4 border-yellow-main">
+                    <p class="text-sm text-gray-500">ยังไม่แก้ไข</p>
+                    <p class="text-3xl font-bold text-yellow-500" id="dash-pending">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow border-l-4 border-blue-400">
+                    <p class="text-sm text-gray-500">กำลังดำเนินการ</p>
+                    <p class="text-3xl font-bold text-blue-500" id="dash-progress">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow border-l-4 border-green-400">
+                    <p class="text-sm text-gray-500">แก้ไขแล้ว</p>
+                    <p class="text-3xl font-bold text-green-500" id="dash-resolved">0</p>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow w-full md:w-1/2 mx-auto">
+                <h3 class="text-lg font-medium mb-4 text-center">สัดส่วนสถานะการแก้ไข</h3>
+                <canvas id="statusChart"></canvas>
+            </div>
+        </section>
+
+        <section id="form-view" class="view-section">
+            <h2 class="text-2xl font-semibold text-purple-dark mb-6">บันทึกข้อมูลซ่อมเสริม</h2>
+            <div class="bg-white rounded-xl shadow p-6 max-w-4xl mx-auto">
+                <form id="studentForm" onsubmit="saveData(event)">
+                    <input type="hidden" id="edit-id">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="block text-sm mb-1">ชื่อ-นามสกุล</label><input type="text" id="s_name" class="w-full border rounded-lg p-2 focus:ring focus:ring-purple-pastel" required></div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div><label class="block text-sm mb-1">ชั้น/ห้อง</label><input type="text" id="s_class" class="w-full border rounded-lg p-2 focus:ring focus:ring-purple-pastel" placeholder="เช่น ป.5/1" required></div>
+                            <div><label class="block text-sm mb-1">เลขที่</label><input type="number" id="s_no" class="w-full border rounded-lg p-2 focus:ring focus:ring-purple-pastel" required></div>
+                        </div>
+                        <div><label class="block text-sm mb-1">รายวิชา</label><input type="text" id="s_subject" class="w-full border rounded-lg p-2 focus:ring focus:ring-purple-pastel" required></div>
+                        <div><label class="block text-sm mb-1">ครูผู้สอน</label><input type="text" id="s_teacher" class="w-full border rounded-lg p-2 focus:ring focus:ring-purple-pastel"></div>
+                        <div><label class="block text-sm mb-1">สถานะการมาเรียน</label>
+                            <select id="s_attend" class="w-full border rounded-lg p-2">
+                                <option value="ขาด">ขาดเรียน</option>
+                                <option value="ลา">ลา</option>
+                                <option value="มาเรียนแต่ค้างงาน">มาเรียนแต่ค้างงาน</option>
+                            </select>
+                        </div>
+                        <div><label class="block text-sm mb-1">สาเหตุ/รายละเอียดงานค้าง</label><input type="text" id="s_reason" class="w-full border rounded-lg p-2"></div>
+                        <div><label class="block text-sm mb-1">วันที่นัดทำงาน/ส่งงาน</label><input type="date" id="s_duedate" class="w-full border rounded-lg p-2"></div>
+                        <div><label class="block text-sm mb-1">สถานะการแก้ไข</label>
+                            <select id="s_status" class="w-full border rounded-lg p-2">
+                                <option value="ยังไม่แก้">ยังไม่แก้ (Pending)</option>
+                                <option value="กำลังดำเนินการ">กำลังดำเนินการ (In Progress)</option>
+                                <option value="แก้ไขแล้ว">แก้ไขแล้ว (Resolved)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex gap-2">
+                        <button type="submit" class="bg-purple-main text-white px-6 py-2 rounded-lg hover:bg-purple-dark transition"><i class="fa-solid fa-save mr-2"></i>บันทึกข้อมูล</button>
+                        <button type="button" onclick="resetForm()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition">ล้างฟอร์ม</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section id="list-view" class="view-section">
+            <h2 class="text-2xl font-semibold text-purple-dark mb-6">รายชื่อนักเรียนซ่อมเสริม</h2>
+            
+            <div class="bg-white p-4 rounded-xl shadow mb-6 flex flex-col md:flex-row gap-4">
+                <input type="text" id="searchName" onkeyup="renderTable()" placeholder="🔍 ค้นหาชื่อนักเรียน..." class="border p-2 rounded-lg flex-1">
+                <select id="filterClass" onchange="renderTable()" class="border p-2 rounded-lg">
+                    <option value="">ทุกระดับชั้น</option>
+                </select>
+                <select id="filterStatus" onchange="renderTable()" class="border p-2 rounded-lg">
+                    <option value="">ทุกสถานะการแก้ไข</option>
+                    <option value="ยังไม่แก้">ยังไม่แก้</option>
+                    <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
+                    <option value="แก้ไขแล้ว">แก้ไขแล้ว</option>
+                </select>
+            </div>
+
+            <div class="bg-white rounded-xl shadow overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-purple-pastel text-purple-dark">
+                            <th class="p-3 border-b">ชื่อ-สกุล</th>
+                            <th class="p-3 border-b">ชั้น/เลขที่</th>
+                            <th class="p-3 border-b">วิชา</th>
+                            <th class="p-3 border-b">สถานะ/สาเหตุ</th>
+                            <th class="p-3 border-b">วันนัดซ่อม</th>
+                            <th class="p-3 border-b">สถานะแก้ไข</th>
+                            <th class="p-3 border-b text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentTableBody" class="text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="report-view" class="view-section">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-purple-dark">สรุปรายงานผล</h2>
+                <div class="no-print flex gap-2">
+                    <button onclick="exportExcel()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 shadow"><i class="fa-solid fa-file-excel mr-2"></i>Export Excel</button>
+                    <button onclick="window.print()" class="bg-purple-main text-white px-4 py-2 rounded-lg hover:bg-purple-dark shadow"><i class="fa-solid fa-print mr-2"></i>พิมพ์รายงาน</button>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl shadow mb-6">
+                <h3 class="text-lg font-medium mb-4">ตารางข้อมูลเพื่อการรายงาน</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm" id="exportTable">
+                        </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- 1. State Management (เก็บข้อมูลจำลองในเครื่องก่อนเชื่อม Google Sheets) ---
+        let students = [
+            { id: 1, name: "ด.ช. สมชาย รักเรียน", class: "ป.5/1", no: 12, subject: "คณิตศาสตร์", teacher: "ครูใจดี", attend: "ขาด", reason: "ป่วย", duedate: "2026-05-30", status: "ยังไม่แก้" },
+            { id: 2, name: "ด.ญ. สมหญิง ขยัน", class: "ป.6/2", no: 5, subject: "ภาษาไทย", teacher: "ครูสมศรี", attend: "มาเรียนแต่ค้างงาน", reason: "งานกลุ่มยังไม่เสร็จ", duedate: "2026-05-26", status: "กำลังดำเนินการ" }
+        ];
+
+        let myChart; // ตัวแปรสำหรับเก็บ Chart.js instance
+
+        // --- 2. Navigation Logic ---
+        function switchView(viewId) {
+            // ซ่อนทุกหน้า
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            // ถอดสีปุ่มทั้งหมด
+            document.querySelectorAll('nav button').forEach(el => el.classList.remove('nav-active'));
+            
+            // โชว์หน้าที่เลือก
+            document.getElementById(viewId + '-view').classList.add('active');
+            document.getElementById('nav-' + viewId).classList.add('nav-active');
+
+            // อัปเดตข้อมูลตามหน้า
+            if(viewId === 'dashboard') updateDashboard();
+            if(viewId === 'list') renderTable();
+            if(viewId === 'report') renderReport();
+        }
+
+        // --- 3. CRUD Operations ---
+        function saveData(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const data = {
+                name: document.getElementById('s_name').value,
+                class: document.getElementById('s_class').value,
+                no: document.getElementById('s_no').value,
+                subject: document.getElementById('s_subject').value,
+                teacher: document.getElementById('s_teacher').value,
+                attend: document.getElementById('s_attend').value,
+                reason: document.getElementById('s_reason').value,
+                duedate: document.getElementById('s_duedate').value,
+                status: document.getElementById('s_status').value
+            };
+
+            if (id) {
+                // อัปเดต
+                const index = students.findIndex(s => s.id == id);
+                students[index] = { ...students[index], ...data };
+                showToast('อัปเดตข้อมูลสำเร็จ');
+            } else {
+                // เพิ่มใหม่
+                data.id = Date.now();
+                students.push(data);
+                showToast('บันทึกข้อมูลสำเร็จ');
+                // *ตรงนี้สามารถต่อยอดเรียก API ส่งเข้า Google Sheets ได้*
+            }
+            
+            resetForm();
+            checkNotifications();
+            switchView('list');
+        }
+
+        function editData(id) {
+            const student = students.find(s => s.id == id);
+            if(student) {
+                document.getElementById('edit-id').value = student.id;
+                document.getElementById('s_name').value = student.name;
+                document.getElementById('s_class').value = student.class;
+                document.getElementById('s_no').value = student.no;
+                document.getElementById('s_subject').value = student.subject;
+                document.getElementById('s_teacher').value = student.teacher;
+                document.getElementById('s_attend').value = student.attend;
+                document.getElementById('s_reason').value = student.reason;
+                document.getElementById('s_duedate').value = student.duedate;
+                document.getElementById('s_status').value = student.status;
+                switchView('form');
+            }
+        }
+
+        function deleteData(id) {
+            if(confirm("ยืนยันการลบข้อมูล?")) {
+                students = students.filter(s => s.id != id);
+                renderTable();
+                showToast('ลบข้อมูลแล้ว');
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('studentForm').reset();
+            document.getElementById('edit-id').value = "";
+        }
+
+        // --- 4. Render UI ---
+        function renderTable() {
+            const tbody = document.getElementById('studentTableBody');
+            const search = document.getElementById('searchName').value.toLowerCase();
+            const filterClass = document.getElementById('filterClass').value;
+            const filterStatus = document.getElementById('filterStatus').value;
+
+            tbody.innerHTML = '';
+            
+            // อัปเดต Dropdown ชั้นเรียน (ดึงจากข้อมูลที่มี)
+            const classes = [...new Set(students.map(s => s.class))];
+            const classSelect = document.getElementById('filterClass');
+            if(classSelect.options.length <= 1 && classes.length > 0) {
+                classes.forEach(c => classSelect.innerHTML += `<option value="${c}">${c}</option>`);
+            }
+
+            students.filter(s => 
+                s.name.toLowerCase().includes(search) &&
+                (filterClass === "" || s.class === filterClass) &&
+                (filterStatus === "" || s.status === filterStatus)
+            ).forEach(s => {
+                const statusColor = s.status === 'ยังไม่แก้' ? 'text-red-500 bg-red-50' : (s.status === 'กำลังดำเนินการ' ? 'text-blue-500 bg-blue-50' : 'text-green-500 bg-green-50');
+                
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 border-b">
+                        <td class="p-3">${s.name}</td>
+                        <td class="p-3">${s.class} / ${s.no}</td>
+                        <td class="p-3">${s.subject}</td>
+                        <td class="p-3">${s.attend} <br><span class="text-xs text-gray-500">${s.reason}</span></td>
+                        <td class="p-3">${s.duedate || '-'}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded-full text-xs ${statusColor}">${s.status}</span></td>
+                        <td class="p-3 text-center">
+                            <button onclick="editData(${s.id})" class="text-yellow-600 hover:text-yellow-800 mx-1"><i class="fa-solid fa-edit"></i></button>
+                            <button onclick="deleteData(${s.id})" class="text-red-400 hover:text-red-600 mx-1"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updateDashboard() {
+            const total = students.length;
+            const pending = students.filter(s => s.status === 'ยังไม่แก้').length;
+            const progress = students.filter(s => s.status === 'กำลังดำเนินการ').length;
+            const resolved = students.filter(s => s.status === 'แก้ไขแล้ว').length;
+
+            document.getElementById('dash-total').innerText = total;
+            document.getElementById('dash-pending').innerText = pending;
+            document.getElementById('dash-progress').innerText = progress;
+            document.getElementById('dash-resolved').innerText = resolved;
+
+            // วาดกราฟ
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            if(myChart) myChart.destroy(); // ลบกราฟเก่าถ้ามี
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['ยังไม่แก้', 'กำลังดำเนินการ', 'แก้ไขแล้ว'],
+                    datasets: [{
+                        data: [pending, progress, resolved],
+                        backgroundColor: ['#F6E05E', '#63B3ED', '#68D391'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true }
+            });
+        }
+
+        function renderReport() {
+            // คัดลอกตารางมาไว้ในหน้า Report เพื่อ Print/Export แบบไม่มีปุ่มแก้ไข
+            const exportTable = document.getElementById('exportTable');
+            exportTable.innerHTML = `
+                <thead class="bg-purple-pastel text-purple-dark border-b">
+                    <tr>
+                        <th class="p-2">ชื่อ-สกุล</th>
+                        <th class="p-2">ชั้น</th>
+                        <th class="p-2">เลขที่</th>
+                        <th class="p-2">วิชา</th>
+                        <th class="p-2">สถานะการมา</th>
+                        <th class="p-2">วันนัดซ่อม</th>
+                        <th class="p-2">สถานะแก้ไข</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${students.map(s => `
+                        <tr class="border-b">
+                            <td class="p-2">${s.name}</td>
+                            <td class="p-2">${s.class}</td>
+                            <td class="p-2">${s.no}</td>
+                            <td class="p-2">${s.subject}</td>
+                            <td class="p-2">${s.attend}</td>
+                            <td class="p-2">${s.duedate || '-'}</td>
+                            <td class="p-2">${s.status}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+        }
+
+        // --- 5. Utilities ---
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('translate-x-full', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+            }, 3000);
+        }
+
+        function checkNotifications() {
+            const pendingCount = students.filter(s => s.status === 'ยังไม่แก้').length;
+            if(pendingCount > 0) {
+                setTimeout(() => showToast(`มีนักเรียนค้างงาน ${pendingCount} รายการที่ยังไม่ได้แก้ไข!`), 1000);
+            }
+        }
+
+        function exportExcel() {
+            const ws = XLSX.utils.json_to_sheet(students.map(s => ({
+                "ชื่อ-นามสกุล": s.name,
+                "ชั้น": s.class,
+                "เลขที่": s.no,
+                "วิชา": s.subject,
+                "สถานะการมา": s.attend,
+                "สาเหตุ": s.reason,
+                "วันที่นัดซ่อม": s.duedate,
+                "สถานะงาน": s.status
+            })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Report");
+            XLSX.writeFile(wb, "Remedial_Report.xlsx");
+        }
+
+        // Initialize on load
+        window.onload = () => {
+            updateDashboard();
+            renderTable();
+            checkNotifications();
+        };
+    </script>
+</body>
+</html>
